@@ -3,516 +3,481 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Danh sách Mô hình 3D - GitHub Pages</title>
-    <!-- Tailwind CSS CDN -->
+    <title>Trình Xem Mô Hình 3D IFC (GitHub BIM Viewer)</title>
+    <!-- Tailwind CSS qua CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 700px;
-            margin: 30px auto;
-            padding: 20px;
-            background-color: #f6f8fa;
-            color: #24292f;
-        }
-        .card {
-            background: #ffffff;
-            border: 1px solid #d0d7de;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 1px 3px rgba(31,35,40,0.12);
-        }
-        h2 { margin-top: 0; }
-        .status {
-            padding: 10px;
-            border-radius: 6px;
-            background: #ddf4ff;
-            color: #0969da;
-            font-weight: bold;
-            margin-bottom: 15px;
-        }
-        ul { list-style: none; padding: 0; margin: 0; }
-        li {
-            padding: 12px;
-            border-bottom: 1px solid #hsla(210,18%,87%,1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        li:last-child { border-bottom: none; }
-        .file-name { font-weight: 600; color: #1f2328; }
-        .file-link {
-            text-decoration: none;
-            color: #0969da;
-            background: #f3f4f6;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .file-link:hover { background: #e5e7eb; }
-        
-        /* CSS Tùy chỉnh cho Canvas 3D */
-        #viewer-container {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-        }
-        #three-canvas {
-          width: 100%;
-          height: 100%;
-          display: block;
-        }
+        body { margin: 0; overflow: hidden; background-color: #0f172a; font-family: system-ui, -apple-system, sans-serif; }
+        #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 3px; }
     </style>
-</head>
-<body>
 
-<div class="card">
-    <h2>📁 Thư mục /models</h2>
-    <div id="status" class="status">🔄 Đang quét file từ GitHub...</div>
-    <ul id="modelList"></ul>
-</div>
-
-<script>
-    // --- CẤU HÌNH THÔNG TIN GITHUB ---
-    // Mặc định tự động nhận diện nếu chạy trên GitHub Pages (username.github.io/repo-name)
-    let OWNER = "hiepsitemple"; 
-    let REPO = "illumi-ifc-viewer"; 
-    const FOLDER_PATH = "models"; // Thư mục cần quét
-
-    // Tự động tách Username và Repo nếu đang chạy trực tiếp trên web GitHub Pages
-    if (window.location.hostname.endsWith('github.io')) {
-        OWNER = window.location.hostname.split('.')[0];
-        const pathSegments = window.location.pathname.split('/').filter(Boolean);
-        if (pathSegments.length > 0) {
-            REPO = pathSegments[0];
+    <!-- Import Map cho Three.js, OrbitControls & Web-IFC -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/examples/jsm/controls/OrbitControls": "https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js",
+            "web-ifc": "https://unpkg.com/web-ifc@0.0.57/web-ifc-api.js",
+            "web-ifc-three": "https://unpkg.com/web-ifc-three@0.0.126/IFCLoader.js"
         }
     }
+    </script>
+</head>
+<body class="text-slate-200 select-none">
 
-    const statusEl = document.getElementById('status');
-    const modelListEl = document.getElementById('modelList');
-    const validExtensions = ['.stl', '.obj', '.ifc', '.ply', '.3mf', '.gltf', '.glb'];
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container"></div>
 
-    // Gọi API của GitHub để lấy danh sách file trong thư mục models/
-    async function scanGitHubModels() {
-        const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER_PATH}`;
+    <!-- UI Overlay Layout -->
+    <div class="relative z-10 pointer-events-none w-full h-screen flex flex-col justify-between p-4">
+        
+        <!-- Header Bar -->
+        <header class="pointer-events-auto bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl p-3 shadow-2xl flex items-center justify-between gap-4 max-w-7xl mx-auto w-full">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-blue-600/20 text-blue-400 rounded-lg border border-blue-500/30">
+                    <i data-lucide="box" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-slate-100 text-base leading-tight">IFC 3D BIM Viewer</h1>
+                    <p class="text-xs text-slate-400">Tự động quét file <code class="bg-slate-800 px-1 py-0.5 rounded text-blue-400">.ifc</code> từ thư mục <code class="bg-slate-800 px-1 py-0.5 rounded text-blue-400">models/</code></p>
+                </div>
+            </div>
 
-        try {
-            const response = await fetch(apiUrl);
+            <!-- Tải file thủ công từ máy tính -->
+            <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-3 py-2 rounded-md transition flex items-center gap-2 border border-slate-700">
+                <i data-lucide="upload" class="w-4 h-4"></i>
+                <span>Tải file local (.ifc)</span>
+                <input type="file" id="local-file-input" accept=".ifc" class="hidden">
+            </label>
+        </header>
 
-            if (!response.ok) {
-                if (response.status === 404) {
-                    throw new Error(`Không tìm thấy thư mục "${FOLDER_PATH}" hoặc repository "${OWNER}/${REPO}".`);
+        <!-- Workspace chính: Sidebar Trái + Khung Viewer + Sidebar Phải -->
+        <div class="flex-1 flex justify-between gap-4 my-4 overflow-hidden">
+            
+            <!-- Sidebar Trái: Danh sách File Quét được & Thông tin BIM -->
+            <aside class="pointer-events-auto w-80 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl p-4 shadow-xl flex flex-col gap-4 overflow-y-auto">
+                <!-- Danh sách file mô hình -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="folder-tree" class="w-4 h-4 text-blue-400"></i> Mô Hình GitHub
+                        </h3>
+                        <button id="refresh-btn" title="Quét lại thư mục" class="text-slate-400 hover:text-blue-400 transition p-1">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+
+                    <div id="models-list" class="space-y-1.5 text-xs">
+                        <div class="p-3 bg-slate-950/40 border border-slate-800/60 rounded-lg text-slate-400 text-center text-xs flex items-center justify-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> Đang quét thư mục models/...
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="border-slate-800">
+
+                <!-- Bảng thuộc tính BIM Data -->
+                <div class="flex-1 flex flex-col">
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <i data-lucide="info" class="w-4 h-4 text-emerald-400"></i> Thuộc Tính Cấu Kiện
+                    </h3>
+                    <div id="property-panel" class="flex-1 text-xs text-slate-400 bg-slate-950/50 p-3 rounded-lg border border-slate-800/60 overflow-y-auto max-h-[220px]">
+                        Click chọn một vật thể 3D để xem thông số chi tiết.
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Khung giữa: Trạng thái Loading Overlay khi tải 3D -->
+            <div id="loading-overlay" class="hidden absolute inset-0 z-20 bg-slate-950/70 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-auto">
+                <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                <p id="loading-text" class="text-sm font-medium text-slate-200">Đang giải mã mô hình IFC 3D...</p>
+            </div>
+
+            <!-- Sidebar Phải: Công cụ điều khiển Viewer -->
+            <aside class="pointer-events-auto w-60 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl p-4 shadow-xl flex flex-col gap-4 self-start">
+                <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <i data-lucide="sliders" class="w-4 h-4 text-indigo-400"></i> Điều Khiển Xem
+                </h3>
+
+                <div class="space-y-2.5 text-xs">
+                    <label class="flex items-center justify-between p-2 bg-slate-950/40 rounded-lg border border-slate-800/60 cursor-pointer hover:bg-slate-800/40">
+                        <span class="flex items-center gap-2"><i data-lucide="grid" class="w-4 h-4 text-slate-400"></i> Lưới Mặt Đất</span>
+                        <input type="checkbox" id="toggle-grid" checked class="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0">
+                    </label>
+
+                    <label class="flex items-center justify-between p-2 bg-slate-950/40 rounded-lg border border-slate-800/60 cursor-pointer hover:bg-slate-800/40">
+                        <span class="flex items-center gap-2"><i data-lucide="box" class="w-4 h-4 text-slate-400"></i> Khung Dây (Wireframe)</span>
+                        <input type="checkbox" id="toggle-wireframe" class="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0">
+                    </label>
+
+                    <label class="flex items-center justify-between p-2 bg-slate-950/40 rounded-lg border border-slate-800/60 cursor-pointer hover:bg-slate-800/40">
+                        <span class="flex items-center gap-2"><i data-lucide="rotate-cw" class="w-4 h-4 text-slate-400"></i> Tự Động Xoay</span>
+                        <input type="checkbox" id="toggle-rotate" class="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0">
+                    </label>
+                </div>
+
+                <hr class="border-slate-800">
+
+                <button id="reset-view-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium py-2 rounded-lg border border-slate-700 transition flex items-center justify-center gap-2">
+                    <i data-lucide="focus" class="w-4 h-4"></i> Căn Giữa Camera
+                </button>
+            </aside>
+        </div>
+
+        <!-- Footer / Status Bar -->
+        <footer class="pointer-events-auto bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-400 flex justify-between items-center max-w-7xl mx-auto w-full">
+            <span id="status-text" class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Sẵn sàng. Chọn mô hình bên trái để xem.
+            </span>
+            <span id="active-file-name" class="font-mono text-[11px] text-blue-400 truncate max-w-xs">
+                Chưa chọn mô hình
+            </span>
+        </footer>
+    </div>
+
+    <!-- Script Logic Chính (Three.js + Web-IFC + Quét GitHub) -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+        import { IFCLoader } from 'web-ifc-three';
+
+        // Khởi tạo Lucide Icons
+        lucide.createIcons();
+
+        // =================================================================
+        // 1. KHỞI TẠO THREE.JS SCENE, CAMERA, LIGHTING
+        // =================================================================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0f172a);
+
+        // Camera
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(30, 20, 30);
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // Orbit Controls (Xoay, Phóng to/Thu nhỏ)
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Ánh sáng
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        dirLight.position.set(50, 80, 40);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const dirLight2 = new THREE.DirectionalLight(0x90caf9, 0.5);
+        dirLight2.position.set(-50, -20, -40);
+        scene.add(dirLight2);
+
+        // Lưới mặt đất (Grid Helper)
+        const gridHelper = new THREE.GridHelper(100, 100, 0x3b82f6, 0x1e293b);
+        gridHelper.position.y = -0.01;
+        scene.add(gridHelper);
+
+        // Khởi tạo IFC Loader & Cấu hình WebAssembly WASM
+        const ifcLoader = new IFCLoader();
+        ifcLoader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.57/');
+
+        // Element DOM references
+        const modelsList = document.getElementById('models-list');
+        const statusText = document.getElementById('status-text');
+        const activeFileName = document.getElementById('active-file-name');
+        const propertyPanel = document.getElementById('property-panel');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
+        const localFileInput = document.getElementById('local-file-input');
+        const refreshBtn = document.getElementById('refresh-btn');
+
+        let currentModel = null;
+        let isWireframe = false;
+
+        // =================================================================
+        // 2. PHẦN 1: QUÉT TỰ ĐỘNG THƯ MỤC "models/" TRÊN GITHUB
+        // =================================================================
+        async function autoDetectIFCFiles() {
+            try {
+                const hostname = window.location.hostname;
+                const pathParts = window.location.pathname.split('/').filter(Boolean);
+
+                // Kiểm tra xem có đang chạy trên GitHub Pages không
+                if (!hostname.includes('github.io')) {
+                    return { 
+                        files: [], 
+                        error: "Đang chạy ở môi trường Local/Custom Server. Tính năng tự động quét chỉ kích hoạt trên GitHub Pages. Bạn có thể mở file trực tiếp qua nút 'Tải file local'." 
+                    };
                 }
-                throw new Error(`Lỗi kết nối GitHub API (Mã: ${response.status})`);
+
+                // Tự động bóc tách Username & Repo Name
+                const owner = hostname.split('.')[0];
+                const repo = pathParts.length > 0 ? pathParts[0] : `${owner}.github.io`;
+
+                // 1. Kiểm tra Branch mặc định của Repo
+                const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+                if (!repoRes.ok) {
+                    if (repoRes.status === 404) {
+                        throw new Error(`Không tìm thấy Repository '${owner}/${repo}'. Đảm bảo Repo ở chế độ PUBLIC.`);
+                    }
+                    throw new Error(`Không thể kết nối GitHub API (HTTP ${repoRes.status})`);
+                }
+                const repoData = await repoRes.json();
+                const defaultBranch = repoData.default_branch || 'main';
+
+                // 2. Gọi API lấy danh sách file trong thư mục models/
+                const contentsRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/models?ref=${defaultBranch}`);
+                if (!contentsRes.ok) {
+                    if (contentsRes.status === 404) {
+                        throw new Error(`Thư mục 'models' chưa tồn tại hoặc chưa có file nào trên branch '${defaultBranch}'.`);
+                    }
+                    throw new Error(`Lỗi đọc thư mục 'models' (HTTP ${contentsRes.status})`);
+                }
+
+                const contents = await contentsRes.json();
+                if (!Array.isArray(contents)) {
+                    throw new Error("Dữ liệu trả về không phải thư mục hợp lệ.");
+                }
+
+                // Lọc các file có đuôi .ifc
+                const ifcFiles = contents
+                    .filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.ifc'))
+                    .map(item => item.name);
+
+                return { files: ifcFiles, error: null };
+
+            } catch (err) {
+                console.error("Lỗi tự động quét file:", err);
+                return { files: [], error: err.message };
             }
+        }
 
-            const data = await response.json();
+        // Vẽ danh sách file ra giao diện
+        async function renderModelsList() {
+            modelsList.innerHTML = `
+                <div class="p-3 bg-slate-950/40 border border-slate-800/60 rounded-lg text-slate-400 text-center text-xs flex items-center justify-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> Đang quét thư mục models/...
+                </div>
+            `;
 
-            // Lọc các file có đuôi mở rộng là file mô hình 3D
-            const modelFiles = data.filter(item => {
-                if (item.type !== 'file') return false;
-                const fileName = item.name.toLowerCase();
-                return validExtensions.some(ext => fileName.endsWith(ext));
-            });
+            const { files, error } = await autoDetectIFCFiles();
 
-            modelListEl.innerHTML = '';
+            modelsList.innerHTML = '';
 
-            if (modelFiles.length === 0) {
-                statusEl.textContent = '⚠️ Thư mục models/ không có file 3D nào!';
-                statusEl.style.background = '#fff8c5';
-                statusEl.style.color = '#9a6700';
+            if (error) {
+                modelsList.innerHTML = `
+                    <div class="p-3 bg-slate-950/50 border border-slate-800/60 rounded-lg text-slate-400 text-xs">
+                        <p class="text-amber-400 font-medium mb-1 flex items-center gap-1">
+                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> Thông báo:
+                        </p>
+                        <p class="text-[11px] leading-relaxed text-slate-400">${error}</p>
+                    </div>
+                `;
+                lucide.createIcons();
                 return;
             }
 
-            // Hiển thị từng file ra màn hình
-            modelFiles.forEach(file => {
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <span class="file-name">📦 ${file.name}</span>
-                    <a class="file-link" href="${file.download_url}" target="_blank" download>Tải về / Raw</a>
+            if (files.length === 0) {
+                modelsList.innerHTML = `
+                    <div class="p-3 bg-slate-950/50 border border-slate-800/60 rounded-lg text-slate-400 text-center text-xs">
+                        Thư mục <code class="text-blue-400">models/</code> trống. <br>Vui lòng ném file <code class="text-blue-400">.ifc</code> vào thư mục này.
+                    </div>
                 `;
-                modelListEl.appendChild(li);
+                return;
+            }
+
+            // Hiển thị từng nút chọn file
+            files.forEach(fileName => {
+                const fileCard = document.createElement('button');
+                fileCard.className = 'w-full text-left p-2.5 bg-slate-950/60 hover:bg-blue-900/30 border border-slate-800/80 hover:border-blue-500/50 rounded-lg transition flex items-center justify-between group';
+                
+                fileCard.innerHTML = `
+                    <div class="flex items-center gap-2 truncate pr-2">
+                        <i data-lucide="file-text" class="w-4 h-4 text-blue-400 shrink-0"></i>
+                        <span class="truncate font-medium text-slate-200 group-hover:text-blue-300">${fileName}</span>
+                    </div>
+                    <i data-lucide="play-circle" class="w-4 h-4 text-slate-500 group-hover:text-blue-400 shrink-0"></i>
+                `;
+
+                // Sự kiện CLICK VÀO FILE -> Load vào khung 3D
+                fileCard.addEventListener('click', () => {
+                    const relativePath = `./models/${fileName}`;
+                    loadIFCFromURL(relativePath, fileName);
+                });
+
+                modelsList.appendChild(fileCard);
             });
 
-            statusEl.textContent = `✅ Đã quét thành công ${modelFiles.length} file mô hình!`;
-            statusEl.style.background = '#dafbe1';
-            statusEl.style.color = '#1a7f37';
-
-        } catch (error) {
-            console.error(error);
-            statusEl.textContent = `❌ ${error.message}`;
-            statusEl.style.background = '#ffebe9';
-            statusEl.style.color = '#cf222e';
+            lucide.createIcons();
         }
-    }
 
-    // Chạy hàm quét
-    scanGitHubModels();
-</script>
-    
-<!-- Import Map dành cho Three.js và Web-IFC -->
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-        "web-ifc": "https://unpkg.com/web-ifc@0.0.57/web-ifc-api.js",
-        "web-ifc-three": "https://unpkg.com/web-ifc-three@0.0.126/IFCLoader.js"
-      }
-    }
-  </script>
-</head>
-<body class="bg-slate-900 text-slate-100 h-screen flex flex-col font-sans overflow-hidden">
+        refreshBtn.addEventListener('click', renderModelsList);
 
-  <!-- Header Header Header -->
-  <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex justify-between items-center shrink-0">
-    <div class="flex items-center space-x-3">
-      <i class="fa-solid fa-cubes text-blue-400 text-2xl"></i>
-      <h1 class="text-xl font-bold tracking-wide">IFC Web Viewer</h1>
-    </div>
-    <!-- GitHub Repo Input -->
-    <div class="flex items-center space-x-2 w-1/2 max-w-lg">
-      <div class="relative w-full">
-        <input type="text" id="repoInput" 
-               placeholder="Nhập owner/repo (Ví dụ: bimspot/ifc-pipeline-sample)" 
-               class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500 pl-9">
-        <i class="fa-brands fa-github absolute left-3 top-2.5 text-slate-400"></i>
-      </div>
-      <button id="scanBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
-        <i class="fa-solid fa-magnifying-glass"></i> Quét
-      </button>
-    </div>
-  </header>
+        // =================================================================
+        // 3. PHẦN 2: GIẢI MÃ VÀ HIỂN THỊ MÔ HÌNH 3D IFC
+        // =================================================================
+        async function loadIFCFromURL(url, fileName) {
+            statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Đang tải <b>${fileName}</b>...`;
+            activeFileName.textContent = fileName;
+            
+            loadingText.textContent = `Đang tải & dựng mô hình 3D: ${fileName}...`;
+            loadingOverlay.classList.remove('hidden');
 
-  <!-- Main Content Layout (2 cột) -->
-  <div class="flex flex-1 overflow-hidden">
-    
-    <!-- CỘT TRÁI: Danh sách File quét được -->
-    <aside class="w-80 bg-slate-800 border-r border-slate-700 flex flex-col shrink-0">
-      <div class="p-4 border-b border-slate-700 flex justify-between items-center">
-        <h2 class="font-semibold text-slate-200 flex items-center gap-2">
-          <i class="fa-solid fa-folder-tree text-amber-400"></i> Danh Sách File IFC
-        </h2>
-        <span id="fileCount" class="bg-slate-700 text-slate-300 text-xs font-bold px-2.5 py-0.5 rounded-full">0</span>
-      </div>
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Không tải được file từ đường dẫn: ${url} (HTTP ${response.status})`);
+                }
 
-      <!-- Danh sách File -->
-      <div id="fileList" class="flex-1 overflow-y-auto p-3 space-y-2">
-        <div class="text-center text-slate-500 text-sm py-8">
-          Nhập tên repository GitHub và nhấn "Quét" để tải danh sách mô hình IFC.
-        </div>
-      </div>
-    </aside>
+                const buffer = await response.arrayBuffer();
 
-    <!-- CỘT PHẢI: Khung nhìn Viewer 3D -->
-    <main class="flex-1 relative bg-slate-950 flex flex-col">
-      
-      <!-- Toolbar Điều Khiển Viewer -->
-      <div class="absolute top-4 left-4 z-10 bg-slate-800/80 backdrop-blur border border-slate-700 p-1.5 rounded-xl flex items-center space-x-1 shadow-lg">
-        <button id="resetCamBtn" title="Đặt lại góc nhìn" class="p-2 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition">
-          <i class="fa-solid fa-video"></i>
-        </button>
-        <button id="wireframeBtn" title="Bật/Tắt Khung dây (Wireframe)" class="p-2 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition">
-          <i class="fa-solid fa-border-all"></i>
-        </button>
-        <button id="toggleGridBtn" title="Bật/Tắt Lưới tọa độ" class="p-2 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition">
-          <i class="fa-solid fa-table-cells"></i>
-        </button>
-        <div class="h-5 w-px bg-slate-700 mx-1"></div>
-        <span id="activeFileName" class="text-xs text-slate-300 font-mono px-2 truncate max-w-xs">
-          Chưa chọn mô hình
-        </span>
-      </div>
+                // Xóa mô hình cũ nếu đang hiển thị
+                if (currentModel) {
+                    scene.remove(currentModel);
+                    currentModel.geometry?.dispose();
+                    currentModel = null;
+                }
 
-      <!-- Loading Overlay trong Viewer -->
-      <div id="loadingSpinner" class="hidden absolute inset-0 z-20 bg-slate-950/70 backdrop-blur-sm flex flex-col items-center justify-center">
-        <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p id="loadingText" class="text-sm font-medium text-slate-200">Đang tải và dựng mô hình IFC 3D...</p>
-      </div>
+                // Giải mã dữ liệu IFC bằng WebAssembly
+                ifcLoader.ifcManager.parse(buffer).then((ifcModel) => {
+                    currentModel = ifcModel;
+                    scene.add(ifcModel);
 
-      <!-- Canvas hiển thị 3D -->
-      <div id="viewer-container">
-        <canvas id="three-canvas"></canvas>
-      </div>
-    </main>
-  </div>
+                    // Tự động căn camera ôm trọn mô hình
+                    fitCameraToModel(ifcModel);
 
-<!-- Script xử lý Logic 3D và Kết nối Quét File -->
-  <script type="module">
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    import { IFCLoader } from 'web-ifc-three';
+                    // Áp dụng chế độ Wireframe nếu đang bật
+                    if (isWireframe) {
+                        currentModel.traverse((child) => { if (child.isMesh) child.material.wireframe = true; });
+                    }
 
-    // ==========================================
-    // 1. Khởi tạo Three.js Scene & Viewer
-    // ==========================================
-    const container = document.getElementById('viewer-container');
-    const canvas = document.getElementById('three-canvas');
+                    loadingOverlay.classList.add('hidden');
+                    statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Đã hiển thị: <b>${fileName}</b>`;
+                });
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0f172a); // Background tối chuẩn Tailwind slate-900
+            } catch (err) {
+                console.error("Lỗi nạp file IFC:", err);
+                loadingOverlay.classList.add('hidden');
+                statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> ${err.message}`;
+                alert(`Lỗi: ${err.message}`);
+            }
+        }
 
-    // Camera
-    const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.set(20, 20, 20);
+        // Tự động điều chỉnh Camera bao quanh mô hình
+        function fitCameraToModel(model) {
+            const box = new THREE.Box3().setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
+            controls.target.copy(center);
+            camera.position.set(center.x + maxDim * 1.2, center.y + maxDim * 0.8, center.z + maxDim * 1.2);
+            controls.update();
+        }
 
-    // Controls
-    const controls = new OrbitControls(camera, canvas);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+        // Tải file thủ công từ máy tính
+        localFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-    // Lighting (Ánh sáng)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-    scene.add(ambientLight);
-
-    const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
-    dirLight1.position.set(25, 40, 20);
-    scene.add(dirLight1);
-
-    const dirLight2 = new THREE.DirectionalLight(0x90e0ef, 0.4);
-    dirLight2.position.set(-20, -20, -20);
-    scene.add(dirLight2);
-
-    // Grid Helper (Lưới mặt phẳng)
-    const gridHelper = new THREE.GridHelper(50, 50, 0x3b82f6, 0x334155);
-    scene.add(gridHelper);
-
-    // Axes Helper (Trục tọa độ)
-    const axesHelper = new THREE.AxesHelper(5);
-    scene.add(axesHelper);
-
-    // Resize Handler
-    window.addEventListener('resize', () => {
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
-    });
-
-    // Loop Animation
-    function animate() {
-      requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    // ==========================================
-    // 2. Cấu hình IFC Loader (WebAssembly)
-    // ==========================================
-    const ifcLoader = new IFCLoader();
-    // Đặt đường dẫn tải file web-ifc.wasm từ CDN unpkg
-    ifcLoader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.57/');
-
-    let currentModel = null;
-    let isWireframe = false;
-
-    // Loading overlay controls
-    const loadingSpinner = document.getElementById('loadingSpinner');
-    const loadingText = document.getElementById('loadingText');
-
-    function showLoading(show, text = "Đang tải mô hình...") {
-      loadingText.textContent = text;
-      loadingSpinner.classList.toggle('hidden', !show);
-    }
-
-    // ==========================================
-    // 3. Hàm Tải File IFC vào Khung Nhìn 3D
-    // ==========================================
-    async function loadIFCModel(fileUrl, fileName) {
-      showLoading(true, `Đang tải dữ liệu: ${fileName}`);
-      document.getElementById('activeFileName').textContent = fileName;
-
-      // Xóa mô hình cũ nếu đang hiển thị
-      if (currentModel) {
-        scene.remove(currentModel);
-        currentModel.geometry?.dispose();
-        currentModel = null;
-      }
-
-      try {
-        // Fetch file dưới dạng Blob để xử lý mượt mà không lo lỗi đường dẫn
-        const response = await fetch(fileUrl);
-        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
-        
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-
-        showLoading(true, "Đang dựng hình 3D hình học...");
-
-        ifcLoader.load(blobUrl, (ifcModel) => {
-          currentModel = ifcModel;
-          scene.add(ifcModel);
-
-          // Tự động điều khiển Camera ôm trọn Mô hình (Fit to bounds)
-          fitCameraToModel(ifcModel);
-
-          showLoading(false);
-          URL.revokeObjectURL(blobUrl); // Dọn dẹp bộ nhớ Blob
-        }, 
-        (progress) => {
-          if (progress.total > 0) {
-            const percent = Math.round((progress.loaded / progress.total) * 100);
-            loadingText.textContent = `Đang dựng mô hình 3D: ${percent}%`;
-          }
-        }, 
-        (error) => {
-          console.error("Lỗi parse IFC:", error);
-          showLoading(false);
-          alert("Lỗi: Không thể dựng mô hình IFC này. Vui lòng kiểm tra lại cấu trúc file.");
+            const url = URL.createObjectURL(file);
+            loadIFCFromURL(url, file.name);
         });
 
-      } catch (err) {
-        console.error("Lỗi fetch file:", err);
-        showLoading(false);
-        alert("Lỗi kết nối khi tải file IFC từ GitHub.");
-      }
-    }
+        // Click chuột chọn vật thể 3D để trích xuất thuộc tính Express ID
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
 
-    // Tự động căn góc nhìn camera theo kích thước mô hình
-    function fitCameraToModel(model) {
-      const box = new THREE.Box3().setFromObject(model);
-      const center = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3());
+        window.addEventListener('click', (event) => {
+            if (event.target.tagName !== 'CANVAS' || !currentModel) return;
 
-      const maxDim = Math.max(size.x, size.y, size.z);
-      const fov = camera.fov * (Math.PI / 180);
-      let cameraDistance = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.8;
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-      camera.position.set(center.x + cameraDistance, center.y + cameraDistance, center.z + cameraDistance);
-      camera.lookAt(center);
-      controls.target.copy(center);
-      controls.update();
-    }
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(currentModel);
 
-    // ==========================================
-    // 4. Logic Quét File IFC từ GitHub Repo
-    // ==========================================
-    const scanBtn = document.getElementById('scanBtn');
-    const repoInput = document.getElementById('repoInput');
-    const fileListEl = document.getElementById('fileList');
-    const fileCountEl = document.getElementById('fileCount');
+            if (intersects.length > 0) {
+                const faceIndex = intersects[0].faceIndex;
+                const expressID = ifcLoader.ifcManager.getExpressId(currentModel.geometry, faceIndex);
 
-    // Repo mẫu mặc định
-    repoInput.value = "bimspot/ifc-pipeline-sample";
-
-    async function scanGitHubRepo() {
-      const repoPath = repoInput.value.trim();
-      if (!repoPath || !repoPath.includes('/')) {
-        alert("Vui lòng nhập định dạng 'owner/repository'");
-        return;
-      }
-
-      fileListEl.innerHTML = `<div class="text-center text-slate-400 py-6"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Đang tìm file .ifc...</div>`;
-
-      try {
-        const apiUrl = `https://api.github.com/repos/${repoPath}/git/trees/main?recursive=1`;
-        let res = await fetch(apiUrl);
-        
-        // Mẹo thử branch 'master' nếu branch 'main' không tồn tại
-        if (!res.ok) {
-          const resMaster = await fetch(`https://api.github.com/repos/${repoPath}/git/trees/master?recursive=1`);
-          if (resMaster.ok) res = resMaster;
-        }
-
-        if (!res.ok) throw new Error("Không thể truy cập Repository. Vui lòng kiểm tra tên repo.");
-
-        const data = await res.json();
-        // Lọc các file có đuôi .ifc
-        const ifcFiles = data.tree.filter(item => item.type === 'blob' && item.path.toLowerCase().endsWith('.ifc'));
-
-        renderFileList(ifcFiles, repoPath);
-
-      } catch (err) {
-        fileListEl.innerHTML = `<div class="text-center text-red-400 py-6 text-sm">${err.message}</div>`;
-        fileCountEl.textContent = '0';
-      }
-    }
-
-    function renderFileList(files, repoPath) {
-      fileCountEl.textContent = files.length;
-
-      if (files.length === 0) {
-        fileListEl.innerHTML = `<div class="text-center text-slate-400 py-6 text-sm">Không tìm thấy file <code>.ifc</code> nào trong repository này.</div>`;
-        return;
-      }
-
-      fileListEl.innerHTML = '';
-      files.forEach((file, index) => {
-        const rawUrl = `https://raw.githubusercontent.com/${repoPath}/HEAD/${file.path}`;
-        const fileName = file.path.split('/').pop();
-
-        const card = document.createElement('div');
-        card.className = "file-item p-3 bg-slate-700/50 hover:bg-blue-600/20 border border-slate-700 hover:border-blue-500/50 rounded-xl cursor-pointer transition flex items-start space-x-3 group";
-        
-        card.innerHTML = `
-          <div class="p-2 bg-slate-800 rounded-lg text-blue-400 group-hover:text-blue-300">
-            <i class="fa-solid fa-cube text-lg"></i>
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold text-slate-200 truncate group-hover:text-white" title="${fileName}">${fileName}</div>
-            <div class="text-xs text-slate-400 truncate mt-0.5">${file.path}</div>
-          </div>
-        `;
-
-        // Sự kiện CLICK VÀO FILE -> Tải mô hình 3D
-        card.addEventListener('click', () => {
-          // Highlight file được chọn
-          document.querySelectorAll('.file-item').forEach(el => el.classList.remove('border-blue-500', 'bg-blue-600/30'));
-          card.classList.add('border-blue-500', 'bg-blue-600/30');
-
-          loadIFCModel(rawUrl, fileName);
+                if (expressID !== undefined) {
+                    propertyPanel.innerHTML = `
+                        <div class="space-y-1.5 text-left">
+                            <div class="text-blue-400 font-semibold border-b border-slate-800 pb-1">Express ID: #${expressID}</div>
+                            <div><span class="text-slate-400">Định dạng:</span> <span class="text-slate-200">IFC Mesh Component</span></div>
+                            <div><span class="text-slate-400">Tọa độ chọn:</span> <br><span class="font-mono text-[10px] text-emerald-400">X:${intersects[0].point.x.toFixed(2)}, Y:${intersects[0].point.y.toFixed(2)}, Z:${intersects[0].point.z.toFixed(2)}</span></div>
+                        </div>
+                    `;
+                }
+            }
         });
 
-        fileListEl.appendChild(card);
-      });
-    }
+        // =================================================================
+        // 4. ĐIỀU KHUYỂN THANH CÔNG CỤ VIEWER
+        // =================================================================
+        document.getElementById('toggle-grid').addEventListener('change', (e) => {
+            gridHelper.visible = e.target.checked;
+        });
 
-    scanBtn.addEventListener('click', scanGitHubRepo);
-    repoInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') scanGitHubRepo();
-    });
+        document.getElementById('toggle-wireframe').addEventListener('change', (e) => {
+            isWireframe = e.target.checked;
+            if (currentModel) {
+                currentModel.traverse((child) => {
+                    if (child.isMesh) child.material.wireframe = isWireframe;
+                });
+            }
+        });
 
-    // Quét sẵn ngay khi tải trang lần đầu
-    scanGitHubRepo();
+        document.getElementById('toggle-rotate').addEventListener('change', (e) => {
+            controls.autoRotate = e.target.checked;
+            controls.autoRotateSpeed = 2.0;
+        });
 
-    // ==========================================
-    // 5. Điều khiển Toolbar Viewer
-    // ==========================================
-    // Đặt lại camera
-    document.getElementById('resetCamBtn').addEventListener('click', () => {
-      if (currentModel) fitCameraToModel(currentModel);
-    });
+        document.getElementById('reset-view-btn').addEventListener('click', () => {
+            if (currentModel) {
+                fitCameraToModel(currentModel);
+            } else {
+                controls.target.set(0, 0, 0);
+                camera.position.set(30, 20, 30);
+                controls.update();
+            }
+        });
 
-    // Bật / Tắt Grid
-    document.getElementById('toggleGridBtn').addEventListener('click', () => {
-      gridHelper.visible = !gridHelper.visible;
-      axesHelper.visible = !axesHelper.visible;
-    });
-
-    // Bật / Tắt Wireframe mode
-    document.getElementById('wireframeBtn').addEventListener('click', () => {
-      if (!currentModel) return;
-      isWireframe = !isWireframe;
-      currentModel.traverse((child) => {
-        if (child.isMesh && child.material) {
-          if (Array.isArray(child.material)) {
-            child.material.forEach(m => m.wireframe = isWireframe);
-          } else {
-            child.material.wireframe = isWireframe;
-          }
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
         }
-      });
-    });
-  </script>
+        animate();
+
+        // Window Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Khởi chạy tự động quét khi tải trang
+        renderModelsList();
+    </script>
 </body>
 </html>
