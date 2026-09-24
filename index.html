@@ -45,7 +45,7 @@
                 </div>
                 <div>
                     <h1 class="font-bold text-slate-100 text-base leading-tight">IFC 3D BIM Viewer</h1>
-                    <p class="text-xs text-slate-400">Tự động quét file <code class="bg-slate-800 px-1 py-0.5 rounded text-blue-400">.ifc</code> từ thư mục <code class="bg-slate-800 px-1 py-0.5 rounded text-blue-400">models/</code></p>
+                    <p class="text-xs text-slate-400">Tự động quét file từ <code class="bg-slate-800 px-1 py-0.5 rounded text-blue-400">hiepsitemple/my-3d-viewer/models</code></p>
                 </div>
             </div>
 
@@ -143,6 +143,14 @@
         import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
         import { IFCLoader } from 'web-ifc-three';
 
+        // =================================================================
+        // 📌 THÔNG TIN REPOSITORY CỦA BẠN
+        // =================================================================
+        const GITHUB_OWNER = 'hiepsitemple';
+        const GITHUB_REPO = 'my-3d-viewer';
+        const GITHUB_BRANCH = 'main';
+        // =================================================================
+
         // Khởi tạo Lucide icons
         lucide.createIcons();
 
@@ -202,52 +210,30 @@
 
         let currentModel = null;
 
-        // =================================================================
-        // 🔥 CÁCH 1: TỰ ĐỘNG QUÉT THƯ MỤC "models/" BẰNG GITHUB API
-        // =================================================================
+        // Quét tự động thư mục models từ GitHub API
         async function autoDetectIFCFiles() {
             try {
-                const hostname = window.location.hostname;
-                const pathParts = window.location.pathname.split('/').filter(Boolean);
+                const apiUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/models?ref=${GITHUB_BRANCH}`;
+                console.log("🌐 Đang gọi GitHub API:", apiUrl);
 
-                // Kiểm tra xem trang có đang chạy trên GitHub Pages không
-                if (!hostname.includes('github.io')) {
-                    return { 
-                        files: [], 
-                        error: "Đang chạy ở môi trường Local/Server riêng. Tính năng tự động quét chỉ hỗ trợ trên GitHub Pages. Bạn có thể mở file trực tiếp qua nút 'Tải file local'." 
-                    };
-                }
+                const response = await fetch(apiUrl);
 
-                // Tự động phân tích Tên tài khoản và Tên Repo từ URL
-                const owner = hostname.split('.')[0];
-                const repo = pathParts.length > 0 ? pathParts[0] : `${owner}.github.io`;
-
-                // 1. Lấy thông tin Repo để xác định Branch mặc định (main hoặc master)
-                const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
-                if (!repoRes.ok) {
-                    if (repoRes.status === 404) {
-                        throw new Error(`Không tìm thấy Repository (Có thể Repo bị đặt ở chế độ Private).`);
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error(`Không thấy thư mục 'models' trên branch '${GITHUB_BRANCH}'. Đảm bảo Repo ở chế độ PUBLIC và thư mục có tên là 'models'.`);
+                    } else if (response.status === 403) {
+                        throw new Error(`Bị giới hạn truy cập GitHub API. Hãy đợi vài phút rồi thử lại.`);
                     }
-                    throw new Error(`Không thể truy cập GitHub API (HTTP ${repoRes.status})`);
-                }
-                const repoData = await repoRes.json();
-                const defaultBranch = repoData.default_branch || 'main';
-
-                // 2. Gọi GitHub API để quét thư mục "models"
-                const contentsRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/models?ref=${defaultBranch}`);
-                if (!contentsRes.ok) {
-                    if (contentsRes.status === 404) {
-                        throw new Error(`Thư mục 'models' chưa tồn tại hoặc chưa có file nào trên branch '${defaultBranch}'.`);
-                    }
-                    throw new Error(`Không thể đọc thư mục 'models' (HTTP ${contentsRes.status})`);
+                    throw new Error(`Lỗi kết nối GitHub API (HTTP ${response.status})`);
                 }
 
-                const contents = await contentsRes.json();
+                const contents = await response.json();
+
                 if (!Array.isArray(contents)) {
-                    throw new Error("Đường dẫn 'models' không phải là thư mục hợp lệ.");
+                    throw new Error("Dữ liệu trả về không phải thư mục hợp lệ.");
                 }
 
-                // 3. Lọc chỉ lấy các file có đuôi mở rộng .ifc
+                // Lọc các file có đuôi mở rộng .ifc (không phân biệt chữ hoa/thường)
                 const ifcFiles = contents
                     .filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.ifc'))
                     .map(item => item.name);
@@ -260,7 +246,7 @@
             }
         }
 
-        // Tải danh sách file tự động và vẽ lên giao diện
+        // Tải danh sách file và vẽ lên giao diện
         async function renderModelsList() {
             modelsList.innerHTML = `
                 <div class="p-3 bg-slate-950/40 border border-slate-800/60 rounded-lg text-slate-400 text-center text-xs flex items-center justify-center gap-2">
@@ -276,7 +262,7 @@
                 modelsList.innerHTML = `
                     <div class="p-3 bg-slate-950/50 border border-slate-800/60 rounded-lg text-slate-400 text-xs">
                         <p class="text-amber-400 font-medium mb-1 flex items-center gap-1">
-                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> Thông báo:
+                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> Thông báo lỗi:
                         </p>
                         <p class="text-[11px] leading-relaxed text-slate-400">${error}</p>
                     </div>
@@ -288,13 +274,13 @@
             if (files.length === 0) {
                 modelsList.innerHTML = `
                     <div class="p-3 bg-slate-950/50 border border-slate-800/60 rounded-lg text-slate-400 text-center text-xs">
-                        Thư mục <code class="text-blue-400">models/</code> trống. <br>Vui lòng ném file <code class="text-blue-400">.ifc</code> vào thư mục này.
+                        Chưa có file <code class="text-blue-400">.ifc</code> nào trong thư mục <code class="text-blue-400">models/</code>.
                     </div>
                 `;
                 return;
             }
 
-            // Sinh ra danh sách nút bấm cho từng file tự động tìm thấy
+            // Sinh các nút chọn file
             files.forEach(fileName => {
                 const fileCard = document.createElement('button');
                 fileCard.className = 'w-full text-left p-2.5 bg-slate-950/60 hover:bg-blue-900/30 border border-slate-800/80 hover:border-blue-500/50 rounded-lg transition flex items-center justify-between group';
@@ -307,7 +293,7 @@
                     <i data-lucide="play-circle" class="w-4 h-4 text-slate-500 group-hover:text-blue-400 shrink-0"></i>
                 `;
 
-                // Khi click vào file, tải trực tiếp bằng đường dẫn tương đối
+                // Tải file trực tiếp qua đường dẫn tương đối
                 fileCard.addEventListener('click', () => {
                     const relativePath = `./models/${fileName}`;
                     loadIFCFromURL(relativePath, fileName);
@@ -324,9 +310,7 @@
             renderModelsList();
         });
 
-        // =================================================================
-        // HÀM TẢI VÀ GIẢI MÃ MÔ HÌNH 3D IFC
-        // =================================================================
+        // Hàm tải và giải mã file IFC
         async function loadIFCFromURL(url, fileName) {
             statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Đang tải <b>${fileName}</b>...`;
             progressContainer.classList.remove('hidden');
@@ -337,7 +321,7 @@
             try {
                 const response = await fetch(url);
                 if (!response.ok) {
-                    throw new Error(`Không tìm thấy file tại đường dẫn: ${url} (HTTP ${response.status})`);
+                    throw new Error(`Không tải được file: ${url} (HTTP ${response.status})`);
                 }
 
                 progressBar.style.width = '50%';
@@ -346,18 +330,18 @@
 
                 const buffer = await response.arrayBuffer();
 
-                // Xóa mô hình cũ nếu đang mở
+                // Xóa mô hình cũ nếu đang hiển thị
                 if (currentModel) {
                     scene.remove(currentModel);
                     currentModel = null;
                 }
 
-                // Dựng mô hình IFC qua WebAssembly
+                // Dựng mô hình IFC qua WASM
                 ifcLoader.ifcManager.parse(buffer).then((ifcModel) => {
                     currentModel = ifcModel;
                     scene.add(ifcModel);
 
-                    // Căn chỉnh camera vừa khung hình
+                    // Căn chỉnh camera vừa góc nhìn
                     const box = new THREE.Box3().setFromObject(ifcModel);
                     const center = box.getCenter(new THREE.Vector3());
                     const size = box.getSize(new THREE.Vector3());
@@ -367,7 +351,7 @@
                     camera.position.set(center.x + maxDim * 1.2, center.y + maxDim * 0.8, center.z + maxDim * 1.2);
                     controls.update();
 
-                    // Hoàn tất
+                    // Cập nhật tiến trình hoàn tất
                     progressBar.style.width = '100%';
                     progressText.textContent = '100%';
                     setTimeout(() => progressContainer.classList.add('hidden'), 500);
@@ -391,7 +375,7 @@
             loadIFCFromURL(url, file.name);
         });
 
-        // Click chọn vật thể 3D để xem thuộc tính Express ID
+        // Event listener click chọn vật thể 3D để xem thông tin
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
@@ -420,7 +404,7 @@
             }
         });
 
-        // Event listeners cho các công cụ xem 3D
+        // Event listeners điều khiển giao diện 3D
         document.getElementById('toggle-grid').addEventListener('change', (e) => gridHelper.visible = e.target.checked);
         document.getElementById('toggle-wireframe').addEventListener('change', (e) => {
             if (currentModel) {
@@ -453,7 +437,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Khởi chạy quét thư mục models/ khi tải trang
+        // Khởi chạy ứng dụng
         renderModelsList();
     </script>
 </body>
