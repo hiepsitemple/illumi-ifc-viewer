@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trình Xem Mô Hình 3D IFC (GitHub Models)</title>
+    <title>Trình Xem Mô Hình 3D IFC (BIM Viewer)</title>
     <!-- Tailwind CSS qua CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -45,7 +45,7 @@
                 </div>
                 <div>
                     <h1 class="font-bold text-slate-100 text-base leading-tight">IFC 3D BIM Viewer</h1>
-                    <p class="text-xs text-slate-400">Tự động quét thư mục <code class="bg-slate-800 px-1 py-0.5 rounded text-blue-400">models/</code> trên GitHub</p>
+                    <p class="text-xs text-slate-400">Tự động quét file <code class="bg-slate-800 px-1 py-0.5 rounded text-blue-400">.ifc</code> từ thư mục <code class="bg-slate-800 px-1 py-0.5 rounded text-blue-400">models/</code></p>
                 </div>
             </div>
 
@@ -62,22 +62,19 @@
             
             <!-- Sidebar Trái: Danh sách File Mô Hình & Thuộc tính -->
             <aside class="pointer-events-auto w-80 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl p-4 shadow-xl flex flex-col gap-4 overflow-y-auto">
-                <!-- Danh sách file quét từ GitHub -->
+                <!-- Danh sách file tự động quét -->
                 <div>
                     <div class="flex items-center justify-between mb-2">
                         <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                            <i data-lucide="folder-git-2" class="w-4 h-4 text-blue-400"></i> Mô Hình Trong Repository
+                            <i data-lucide="folder" class="w-4 h-4 text-blue-400"></i> Danh Sách Mô Hình
                         </h3>
-                        <button id="refresh-btn" class="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800 transition" title="Quét lại">
+                        <button id="refresh-btn" title="Quét lại thư mục" class="text-slate-400 hover:text-blue-400 transition">
                             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                         </button>
                     </div>
 
                     <div id="models-list" class="space-y-1.5 text-xs">
-                        <div class="text-slate-400 bg-slate-950/50 p-3 rounded-lg border border-slate-800/60 text-center flex items-center justify-center gap-2">
-                            <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-blue-400"></i>
-                            Đang kết nối GitHub API...
-                        </div>
+                        <!-- Danh sách file sẽ được tự động chèn vào đây -->
                     </div>
                 </div>
 
@@ -129,7 +126,7 @@
         <footer class="pointer-events-auto bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-400 flex justify-between items-center max-w-6xl mx-auto w-full">
             <span id="status-text" class="flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                Sẵn sàng.
+                Sẵn sàng. Chọn mô hình bên trái để xem.
             </span>
             <div id="progress-container" class="hidden items-center gap-3 w-64">
                 <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700">
@@ -145,14 +142,6 @@
         import * as THREE from 'three';
         import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
         import { IFCLoader } from 'web-ifc-three';
-
-        // =================================================================
-        // ⚙️ CẤU HÌNH GITHUB REPOSITORY CỦA BẠN TẠI ĐÂY
-        // =================================================================
-        const OWNER = 'hiepsitemple'; // Thay bằng Tên người dùng GitHub của bạn
-        const REPO = 'illumi-ifc-viewer';        // Thay bằng Tên Repository của bạn
-        const BRANCH = 'main';                // Tên nhánh chính (main hoặc master)
-        // =================================================================
 
         // Khởi tạo Lucide icons
         lucide.createIcons();
@@ -208,110 +197,148 @@
         const progressText = document.getElementById('progress-text');
         const progressContainer = document.getElementById('progress-container');
         const propertyPanel = document.getElementById('property-panel');
-        const refreshBtn = document.getElementById('refresh-btn');
         const localFileInput = document.getElementById('local-file-input');
+        const refreshBtn = document.getElementById('refresh-btn');
 
         let currentModel = null;
 
-        // 1. Hàm quét danh sách File trong thư mục "models" bằng GitHub REST API
-        async function fetchGitHubModels() {
-            modelsList.innerHTML = `
-                <div class="text-slate-400 bg-slate-950/50 p-3 rounded-lg border border-slate-800/60 text-center flex items-center justify-center gap-2">
-                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-blue-400"></i>
-                    Đang quét thư mục models...
-                </div>
-            `;
-            lucide.createIcons();
-
-            const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/models?ref=${BRANCH}`;
-
+        // =================================================================
+        // 🔥 CÁCH 1: TỰ ĐỘNG QUÉT THƯ MỤC "models/" BẰNG GITHUB API
+        // =================================================================
+        async function autoDetectIFCFiles() {
             try {
-                const response = await fetch(apiUrl);
-                
-                if (response.status === 404) {
-                    modelsList.innerHTML = `
-                        <div class="p-3 bg-rose-950/40 border border-rose-800/60 rounded-lg text-rose-300 text-xs">
-                            <p class="font-semibold mb-1">Thư mục không tồn tại!</p>
-                            <p class="text-[11px] text-rose-400/80">Hãy đảm bảo bạn đã tạo thư mục <code class="bg-rose-900/50 px-1 rounded">models/</code> trong repo <b>${REPO}</b>.</p>
-                        </div>
-                    `;
-                    return;
+                const hostname = window.location.hostname;
+                const pathParts = window.location.pathname.split('/').filter(Boolean);
+
+                // Kiểm tra xem trang có đang chạy trên GitHub Pages không
+                if (!hostname.includes('github.io')) {
+                    return { 
+                        files: [], 
+                        error: "Đang chạy ở môi trường Local/Server riêng. Tính năng tự động quét chỉ hỗ trợ trên GitHub Pages. Bạn có thể mở file trực tiếp qua nút 'Tải file local'." 
+                    };
                 }
 
-                if (response.status === 403) {
-                    modelsList.innerHTML = `
-                        <div class="p-3 bg-amber-950/40 border border-amber-800/60 rounded-lg text-amber-300 text-xs">
-                            <p class="font-semibold mb-1">Bị giới hạn API GitHub!</p>
-                            <p class="text-[11px] text-amber-400/80">Vui lòng chờ ít phút hoặc tải file trực tiếp qua nút ở góc trên.</p>
-                        </div>
-                    `;
-                    return;
+                // Tự động phân tích Tên tài khoản và Tên Repo từ URL
+                const owner = hostname.split('.')[0];
+                const repo = pathParts.length > 0 ? pathParts[0] : `${owner}.github.io`;
+
+                // 1. Lấy thông tin Repo để xác định Branch mặc định (main hoặc master)
+                const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+                if (!repoRes.ok) {
+                    if (repoRes.status === 404) {
+                        throw new Error(`Không tìm thấy Repository (Có thể Repo bị đặt ở chế độ Private).`);
+                    }
+                    throw new Error(`Không thể truy cập GitHub API (HTTP ${repoRes.status})`);
+                }
+                const repoData = await repoRes.json();
+                const defaultBranch = repoData.default_branch || 'main';
+
+                // 2. Gọi GitHub API để quét thư mục "models"
+                const contentsRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/models?ref=${defaultBranch}`);
+                if (!contentsRes.ok) {
+                    if (contentsRes.status === 404) {
+                        throw new Error(`Thư mục 'models' chưa tồn tại hoặc chưa có file nào trên branch '${defaultBranch}'.`);
+                    }
+                    throw new Error(`Không thể đọc thư mục 'models' (HTTP ${contentsRes.status})`);
                 }
 
-                const data = await response.json();
-
-                if (!Array.isArray(data)) {
-                    throw new Error("Dữ liệu trả về không hợp lệ");
+                const contents = await contentsRes.json();
+                if (!Array.isArray(contents)) {
+                    throw new Error("Đường dẫn 'models' không phải là thư mục hợp lệ.");
                 }
 
-                // Lọc các file có đuôi .ifc
-                const ifcFiles = data.filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.ifc'));
+                // 3. Lọc chỉ lấy các file có đuôi mở rộng .ifc
+                const ifcFiles = contents
+                    .filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.ifc'))
+                    .map(item => item.name);
 
-                if (ifcFiles.length === 0) {
-                    modelsList.innerHTML = `
-                        <div class="p-3 bg-slate-950/50 border border-slate-800/60 rounded-lg text-slate-400 text-center text-xs">
-                            Không tìm thấy file <code class="text-blue-400">.ifc</code> nào trong thư mục <b>models/</b>.
-                        </div>
-                    `;
-                    return;
-                }
-
-                // Hiển thị danh sách các file IFC lên UI
-                modelsList.innerHTML = '';
-                ifcFiles.forEach(file => {
-                    const fileCard = document.createElement('button');
-                    fileCard.className = 'w-full text-left p-2.5 bg-slate-950/60 hover:bg-blue-900/30 border border-slate-800/80 hover:border-blue-500/50 rounded-lg transition flex items-center justify-between group';
-                    
-                    fileCard.innerHTML = `
-                        <div class="flex items-center gap-2 truncate pr-2">
-                            <i data-lucide="file-text" class="w-4 h-4 text-blue-400 shrink-0"></i>
-                            <span class="truncate font-medium text-slate-200 group-hover:text-blue-300">${file.name}</span>
-                        </div>
-                        <i data-lucide="play-circle" class="w-4 h-4 text-slate-500 group-hover:text-blue-400 shrink-0"></i>
-                    `;
-
-                    // Sự kiện click chọn mô hình từ GitHub
-                    fileCard.addEventListener('click', () => {
-                        const rawUrl = file.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/models/${file.name}`;
-                        loadIFCFromURL(rawUrl, file.name);
-                    });
-
-                    modelsList.appendChild(fileCard);
-                });
-
-                lucide.createIcons();
+                return { files: ifcFiles, error: null };
 
             } catch (err) {
-                console.error("Lỗi quét GitHub API:", err);
-                modelsList.innerHTML = `
-                    <div class="p-3 bg-slate-950/50 border border-slate-800/60 rounded-lg text-slate-400 text-xs text-center">
-                        Không thể kết nối API. Hãy kiểm tra lại hằng số <b>OWNER</b> và <b>REPO</b> trong file code.
-                    </div>
-                `;
+                console.error("Lỗi tự động quét file:", err);
+                return { files: [], error: err.message };
             }
         }
 
-        // 2. Hàm tải và giải mã file IFC từ URL
+        // Tải danh sách file tự động và vẽ lên giao diện
+        async function renderModelsList() {
+            modelsList.innerHTML = `
+                <div class="p-3 bg-slate-950/40 border border-slate-800/60 rounded-lg text-slate-400 text-center text-xs flex items-center justify-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> Đang quét thư mục models/...
+                </div>
+            `;
+
+            const { files, error } = await autoDetectIFCFiles();
+
+            modelsList.innerHTML = '';
+
+            if (error) {
+                modelsList.innerHTML = `
+                    <div class="p-3 bg-slate-950/50 border border-slate-800/60 rounded-lg text-slate-400 text-xs">
+                        <p class="text-amber-400 font-medium mb-1 flex items-center gap-1">
+                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> Thông báo:
+                        </p>
+                        <p class="text-[11px] leading-relaxed text-slate-400">${error}</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            if (files.length === 0) {
+                modelsList.innerHTML = `
+                    <div class="p-3 bg-slate-950/50 border border-slate-800/60 rounded-lg text-slate-400 text-center text-xs">
+                        Thư mục <code class="text-blue-400">models/</code> trống. <br>Vui lòng ném file <code class="text-blue-400">.ifc</code> vào thư mục này.
+                    </div>
+                `;
+                return;
+            }
+
+            // Sinh ra danh sách nút bấm cho từng file tự động tìm thấy
+            files.forEach(fileName => {
+                const fileCard = document.createElement('button');
+                fileCard.className = 'w-full text-left p-2.5 bg-slate-950/60 hover:bg-blue-900/30 border border-slate-800/80 hover:border-blue-500/50 rounded-lg transition flex items-center justify-between group';
+                
+                fileCard.innerHTML = `
+                    <div class="flex items-center gap-2 truncate pr-2">
+                        <i data-lucide="file-text" class="w-4 h-4 text-blue-400 shrink-0"></i>
+                        <span class="truncate font-medium text-slate-200 group-hover:text-blue-300">${fileName}</span>
+                    </div>
+                    <i data-lucide="play-circle" class="w-4 h-4 text-slate-500 group-hover:text-blue-400 shrink-0"></i>
+                `;
+
+                // Khi click vào file, tải trực tiếp bằng đường dẫn tương đối
+                fileCard.addEventListener('click', () => {
+                    const relativePath = `./models/${fileName}`;
+                    loadIFCFromURL(relativePath, fileName);
+                });
+
+                modelsList.appendChild(fileCard);
+            });
+
+            lucide.createIcons();
+        }
+
+        // Nút Refresh danh sách
+        refreshBtn.addEventListener('click', () => {
+            renderModelsList();
+        });
+
+        // =================================================================
+        // HÀM TẢI VÀ GIẢI MÃ MÔ HÌNH 3D IFC
+        // =================================================================
         async function loadIFCFromURL(url, fileName) {
             statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Đang tải <b>${fileName}</b>...`;
             progressContainer.classList.remove('hidden');
             progressContainer.classList.add('flex');
-            progressBar.style.width = '10%';
-            progressText.textContent = '10%';
+            progressBar.style.width = '15%';
+            progressText.textContent = '15%';
 
             try {
                 const response = await fetch(url);
-                if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+                if (!response.ok) {
+                    throw new Error(`Không tìm thấy file tại đường dẫn: ${url} (HTTP ${response.status})`);
+                }
 
                 progressBar.style.width = '50%';
                 progressText.textContent = '50%';
@@ -350,12 +377,12 @@
 
             } catch (err) {
                 console.error("Lỗi nạp file IFC:", err);
-                statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> Lỗi tải file! Vui lòng thử lại.`;
+                statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> ${err.message}`;
                 progressContainer.classList.add('hidden');
             }
         }
 
-        // 3. Tải file thủ công từ máy tính
+        // Tải file thủ công từ máy tính
         localFileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -364,7 +391,7 @@
             loadIFCFromURL(url, file.name);
         });
 
-        // 4. Click chọn vật thể 3D để xem ID
+        // Click chọn vật thể 3D để xem thuộc tính Express ID
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
@@ -393,7 +420,7 @@
             }
         });
 
-        // Event listeners cho công cụ xem
+        // Event listeners cho các công cụ xem 3D
         document.getElementById('toggle-grid').addEventListener('change', (e) => gridHelper.visible = e.target.checked);
         document.getElementById('toggle-wireframe').addEventListener('change', (e) => {
             if (currentModel) {
@@ -411,9 +438,7 @@
             controls.update();
         });
 
-        refreshBtn.addEventListener('click', fetchGitHubModels);
-
-        // Loop Render
+        // Render Loop
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
@@ -428,8 +453,8 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Khởi chạy: Tự động quét các file khi vào trang
-        fetchGitHubModels();
+        // Khởi chạy quét thư mục models/ khi tải trang
+        renderModelsList();
     </script>
 </body>
 </html>
