@@ -1,52 +1,23 @@
 <!DOCTYPE html>
-<html lang="vi" class="dark">
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D IFC BIM Viewer - GitHub Models Scanner</title>
-    
-    <!-- Tailwind CSS CDN -->
+    <title>Trình Xem Mô Hình 3D IFC (GitHub Models)</title>
+    <!-- Tailwind CSS qua CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            500: '#3b82f6',
-                            600: '#2563eb',
-                            700: '#1d4ed8'
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    
-    <!-- Custom Glassmorphism Styles -->
     <style>
-        body { margin: 0; overflow: hidden; background-color: #090d16; font-family: system-ui, -apple-system, sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #0f172a; font-family: system-ui, -apple-system, sans-serif; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
-        
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.82);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-
-        /* Custom Scrollbar Styling */
-        .custom-scroll::-webkit-scrollbar { width: 5px; }
-        .custom-scroll::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); }
-        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 4px; }
-        .custom-scroll::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, 1); }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 3px; }
     </style>
 
-    <!-- Import Map for Three.js and Web-IFC Libraries -->
+    <!-- Import Map cho Three.js & web-ifc-three -->
     <script type="importmap">
     {
         "imports": {
@@ -58,101 +29,89 @@
     }
     </script>
 </head>
-<body class="text-slate-100 select-none antialiased">
+<body class="text-slate-200 select-none">
 
-    <!-- 3D WebGL Canvas Layer -->
+    <!-- 3D Canvas Container -->
     <div id="canvas-container"></div>
 
-    <!-- Application UI Overlay -->
-    <div class="relative z-10 pointer-events-none w-full h-screen flex flex-col justify-between p-3 md:p-5">
+    <!-- UI Overlay Controls -->
+    <div class="relative z-10 pointer-events-none w-full h-screen flex flex-col justify-between p-4">
         
-        <!-- Header Navigation Bar -->
-        <header class="pointer-events-auto glass-panel rounded-2xl p-3 shadow-2xl flex flex-wrap items-center justify-between gap-3 max-w-7xl mx-auto w-full">
+        <!-- Header -->
+        <header class="pointer-events-auto bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl p-3 shadow-2xl flex items-center justify-between gap-4 max-w-6xl mx-auto w-full">
             <div class="flex items-center gap-3">
-                <div class="p-2.5 bg-blue-600/20 text-blue-400 rounded-xl border border-blue-500/30 flex items-center justify-center">
+                <div class="p-2 bg-blue-600/20 text-blue-400 rounded-lg border border-blue-500/30">
                     <i data-lucide="box" class="w-6 h-6"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-slate-100 text-base leading-tight flex items-center gap-2">
-                        IFC BIM 3D Viewer
-                        <span class="text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full">GitHub Auto-Scanner</span>
-                    </h1>
-                    <p class="text-xs text-slate-400">Trình quét & xem mô hình IFC công trình trực tuyến</p>
+                    <h1 class="font-bold text-slate-100 text-base leading-tight">IFC 3D BIM Viewer</h1>
+                    <p class="text-xs text-slate-400">Tự động quét thư mục <code class="bg-slate-800 px-1 py-0.5 rounded text-blue-400">models/</code> trên GitHub</p>
                 </div>
             </div>
 
-            <!-- Repository Source Status Badge -->
-            <div class="flex items-center gap-2 bg-slate-950/60 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
-                <i data-lucide="folder-git-2" class="w-4 h-4 text-emerald-400"></i>
-                <span id="repo-info-text" class="text-slate-300 font-mono text-[11px]">Đang quét Repository...</span>
-            </div>
+            <!-- Tải file thủ công từ máy tính -->
+            <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-3 py-2 rounded-md transition flex items-center gap-2 border border-slate-700">
+                <i data-lucide="upload" class="w-4 h-4"></i>
+                <span>Tải file local (.ifc)</span>
+                <input type="file" id="local-file-input" accept=".ifc" class="hidden">
+            </label>
         </header>
 
-        <!-- Main Workspace Panels (Sidebar & Controls) -->
-        <div class="flex-1 flex justify-between gap-4 my-3 overflow-hidden">
+        <!-- Main Workspace (Sidebar + Viewer) -->
+        <div class="flex-1 flex justify-between gap-4 my-4 overflow-hidden">
             
-            <!-- Left Sidebar: GitHub Models & Properties -->
-            <aside class="pointer-events-auto w-80 md:w-96 glass-panel rounded-2xl p-4 shadow-2xl flex flex-col gap-4 overflow-hidden">
-                
-                <!-- Section 1: GitHub Repo Models Scanner -->
-                <div class="flex flex-col max-h-[45%]">
+            <!-- Sidebar Trái: Danh sách File Mô Hình & Thuộc tính -->
+            <aside class="pointer-events-auto w-80 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl p-4 shadow-xl flex flex-col gap-4 overflow-y-auto">
+                <!-- Danh sách file quét từ GitHub -->
+                <div>
                     <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <i data-lucide="folder-open" class="w-4 h-4 text-blue-400"></i> Mô Hình Trong `models/`
+                        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="folder-git-2" class="w-4 h-4 text-blue-400"></i> Mô Hình Trong Repository
                         </h3>
-                        <button id="refresh-models-btn" title="Tải lại danh sách file từ Repo" class="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
-                            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                        <button id="refresh-btn" class="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800 transition" title="Quét lại">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                         </button>
                     </div>
 
-                    <!-- Repository File List Container -->
-                    <div id="repo-models-list" class="flex-1 bg-slate-950/60 rounded-xl border border-slate-800/80 p-2 overflow-y-auto custom-scroll space-y-1.5 min-h-[110px]">
-                        <div class="text-xs text-slate-400 text-center py-6 flex flex-col items-center gap-2">
-                            <i data-lucide="loader" class="w-5 h-5 animate-spin text-blue-400"></i>
-                            <span>Đang tìm kiếm file .ifc trong repo...</span>
+                    <div id="models-list" class="space-y-1.5 text-xs">
+                        <div class="text-slate-400 bg-slate-950/50 p-3 rounded-lg border border-slate-800/60 text-center flex items-center justify-center gap-2">
+                            <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-blue-400"></i>
+                            Đang kết nối GitHub API...
                         </div>
                     </div>
                 </div>
 
-                <!-- Section 2: Local File Upload Option -->
-                <div class="pt-2 border-t border-slate-800/80">
-                    <label class="block text-xs font-medium text-slate-400 mb-1.5">Hoặc chọn file từ máy tính:</label>
-                    <label class="cursor-pointer bg-slate-950/60 hover:bg-slate-800/80 text-slate-300 text-xs font-medium p-2.5 rounded-xl border border-dashed border-slate-700 hover:border-blue-500 transition flex items-center justify-center gap-2">
-                        <i data-lucide="upload-cloud" class="w-4 h-4 text-blue-400"></i>
-                        <span id="local-file-label">Tải file .IFC từ máy</span>
-                        <input type="file" id="local-file-input" accept=".ifc" class="hidden">
-                    </label>
-                </div>
+                <hr class="border-slate-800">
 
-                <!-- Section 3: BIM Property Inspection Panel -->
-                <div class="flex-1 flex flex-col overflow-hidden pt-2 border-t border-slate-800/80">
-                    <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <i data-lucide="file-json" class="w-4 h-4 text-emerald-400"></i> Thuộc Tính Cấu Kiện (BIM Data)
+                <!-- Bảng thuộc tính BIM -->
+                <div class="flex-1 flex flex-col">
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <i data-lucide="info" class="w-4 h-4 text-emerald-400"></i> Thuộc Tính Cấu Kiện (BIM Data)
                     </h3>
-                    <div id="property-panel" class="flex-1 bg-slate-950/60 rounded-xl border border-slate-800/80 p-3 overflow-y-auto custom-scroll text-xs text-slate-400">
-                        Nhấp chuột vào bất kỳ vật thể 3D nào trên màn hình để xem thông tin thuộc tính chi tiết.
+                    <div id="property-panel" class="flex-1 text-xs text-slate-400 bg-slate-950/50 p-3 rounded-lg border border-slate-800/60 overflow-y-auto max-h-[220px]">
+                        Click chọn một vật thể 3D để xem thông số chi tiết.
                     </div>
                 </div>
             </aside>
 
-            <!-- Right Sidebar: 3D View Controls Toolbar -->
-            <aside class="pointer-events-auto w-60 glass-panel rounded-2xl p-4 shadow-2xl flex flex-col gap-4 self-start">
-                <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <i data-lucide="sliders" class="w-4 h-4 text-indigo-400"></i> Công Cụ Hiển Thị
+            <!-- Sidebar Phải: Công cụ điều khiển 3D -->
+            <aside class="pointer-events-auto w-60 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl p-4 shadow-xl flex flex-col gap-4 self-start">
+                <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <i data-lucide="sliders" class="w-4 h-4 text-indigo-400"></i> Cấu Hình Xem
                 </h3>
 
-                <div class="space-y-2 text-xs">
-                    <label class="flex items-center justify-between p-2.5 bg-slate-950/50 rounded-xl border border-slate-800/80 cursor-pointer hover:bg-slate-800/40 transition">
+                <div class="space-y-2.5 text-xs">
+                    <label class="flex items-center justify-between p-2 bg-slate-950/40 rounded-lg border border-slate-800/60 cursor-pointer hover:bg-slate-800/40">
                         <span class="flex items-center gap-2"><i data-lucide="grid" class="w-4 h-4 text-slate-400"></i> Lưới Mặt Đất</span>
                         <input type="checkbox" id="toggle-grid" checked class="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0">
                     </label>
 
-                    <label class="flex items-center justify-between p-2.5 bg-slate-950/50 rounded-xl border border-slate-800/80 cursor-pointer hover:bg-slate-800/40 transition">
+                    <label class="flex items-center justify-between p-2 bg-slate-950/40 rounded-lg border border-slate-800/60 cursor-pointer hover:bg-slate-800/40">
                         <span class="flex items-center gap-2"><i data-lucide="box" class="w-4 h-4 text-slate-400"></i> Khung Dây</span>
                         <input type="checkbox" id="toggle-wireframe" class="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0">
                     </label>
 
-                    <label class="flex items-center justify-between p-2.5 bg-slate-950/50 rounded-xl border border-slate-800/80 cursor-pointer hover:bg-slate-800/40 transition">
+                    <label class="flex items-center justify-between p-2 bg-slate-950/40 rounded-lg border border-slate-800/60 cursor-pointer hover:bg-slate-800/40">
                         <span class="flex items-center gap-2"><i data-lucide="rotate-cw" class="w-4 h-4 text-slate-400"></i> Tự Động Xoay</span>
                         <input type="checkbox" id="toggle-rotate" class="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0">
                     </label>
@@ -160,46 +119,54 @@
 
                 <hr class="border-slate-800">
 
-                <button id="reset-view-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold py-2.5 px-3 rounded-xl border border-slate-700 transition flex items-center justify-center gap-2 shadow">
-                    <i data-lucide="focus" class="w-4 h-4 text-blue-400"></i> Căn Giữa Camera
+                <button id="reset-view-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium py-2 rounded-lg border border-slate-700 transition flex items-center justify-center gap-2">
+                    <i data-lucide="focus" class="w-4 h-4"></i> Căn Giữa Camera
                 </button>
             </aside>
         </div>
 
         <!-- Footer / Status Bar -->
-        <footer class="pointer-events-auto glass-panel rounded-2xl px-4 py-2.5 text-xs text-slate-400 flex flex-wrap justify-between items-center gap-3 max-w-7xl mx-auto w-full">
-            <span id="status-text" class="flex items-center gap-2 truncate">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Hệ thống sẵn sàng. Vui lòng chọn mô hình IFC để xem.
+        <footer class="pointer-events-auto bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-400 flex justify-between items-center max-w-6xl mx-auto w-full">
+            <span id="status-text" class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Sẵn sàng.
             </span>
             <div id="progress-container" class="hidden items-center gap-3 w-64">
-                <div class="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
-                    <div id="progress-bar" class="bg-blue-500 h-1.5 rounded-full w-0 transition-all duration-200"></div>
+                <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700">
+                    <div id="progress-bar" class="bg-blue-500 h-1.5 rounded-full w-0 transition-all duration-150"></div>
                 </div>
-                <span id="progress-text" class="text-[10px] font-mono text-slate-400 whitespace-nowrap">0%</span>
+                <span id="progress-text" class="text-[10px] text-slate-400 whitespace-nowrap">0%</span>
             </div>
         </footer>
     </div>
 
-    <!-- Application Logic ES Module -->
+    <!-- Application Script (ES Module) -->
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
         import { IFCLoader } from 'web-ifc-three';
 
-        // Initialize Lucide Icons
+        // =================================================================
+        // ⚙️ CẤU HÌNH GITHUB REPOSITORY CỦA BẠN TẠI ĐÂY
+        // =================================================================
+        const OWNER = 'hiepsitemple'; // Thay bằng Tên người dùng GitHub của bạn
+        const REPO = 'illumi-ifc-viewer';        // Thay bằng Tên Repository của bạn
+        const BRANCH = 'main';                // Tên nhánh chính (main hoặc master)
+        // =================================================================
+
+        // Khởi tạo Lucide icons
         lucide.createIcons();
 
-        // 1. Scene & Canvas Setup
+        // Canvas & Three.js Scene Setup
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x090d16);
+        scene.background = new THREE.Color(0x0f172a);
 
-        // 2. Camera Setup
+        // Camera Setup
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(25, 20, 25);
+        camera.position.set(30, 20, 30);
 
-        // 3. Renderer Setup
+        // Renderer Setup
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -207,209 +174,163 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         container.appendChild(renderer.domElement);
 
-        // 4. Orbit Controls
+        // Controls
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
 
-        // 5. Lighting Setup
+        // Ánh sáng
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
         scene.add(ambientLight);
 
-        const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.5);
-        dirLight1.position.set(40, 60, 30);
-        dirLight1.castShadow = true;
-        dirLight1.shadow.mapSize.width = 2048;
-        dirLight1.shadow.mapSize.height = 2048;
-        scene.add(dirLight1);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        dirLight.position.set(50, 80, 40);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
 
-        const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 0.6);
-        dirLight2.position.set(-30, -10, -30);
+        const dirLight2 = new THREE.DirectionalLight(0x90caf9, 0.5);
+        dirLight2.position.set(-50, -20, -40);
         scene.add(dirLight2);
 
-        // 6. Grid Helper
+        // Grid
         const gridHelper = new THREE.GridHelper(100, 100, 0x3b82f6, 0x1e293b);
         gridHelper.position.y = -0.01;
         scene.add(gridHelper);
 
-        // App State
-        let currentModel = null;
-        let loadedIfcFiles = [];
-
-        // Configure IFC Loader & WebAssembly
+        // Setup IFC Loader
         const ifcLoader = new IFCLoader();
         ifcLoader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.44/');
 
-        // UI DOM Elements
+        // DOM Element References
+        const modelsList = document.getElementById('models-list');
         const statusText = document.getElementById('status-text');
         const progressBar = document.getElementById('progress-bar');
         const progressText = document.getElementById('progress-text');
         const progressContainer = document.getElementById('progress-container');
         const propertyPanel = document.getElementById('property-panel');
-        const repoModelsList = document.getElementById('repo-models-list');
-        const repoInfoText = document.getElementById('repo-info-text');
+        const refreshBtn = document.getElementById('refresh-btn');
+        const localFileInput = document.getElementById('local-file-input');
 
-        // GitHub Repository Scanner Logic
-        async function scanGitHubRepoModels() {
-            repoModelsList.innerHTML = `
-                <div class="text-xs text-slate-400 text-center py-6 flex flex-col items-center gap-2">
-                    <i data-lucide="loader" class="w-5 h-5 animate-spin text-blue-400"></i>
-                    <span>Đang quét thư mục models/...</span>
+        let currentModel = null;
+
+        // 1. Hàm quét danh sách File trong thư mục "models" bằng GitHub REST API
+        async function fetchGitHubModels() {
+            modelsList.innerHTML = `
+                <div class="text-slate-400 bg-slate-950/50 p-3 rounded-lg border border-slate-800/60 text-center flex items-center justify-center gap-2">
+                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-blue-400"></i>
+                    Đang quét thư mục models...
                 </div>
             `;
             lucide.createIcons();
 
-            let owner = '';
-            let repo = '';
-
-            const hostname = window.location.hostname;
-            const pathSegments = window.location.pathname.split('/').filter(Boolean);
-
-            // Detect GitHub Pages Environment
-            if (hostname.includes('github.io')) {
-                owner = hostname.split('.')[0];
-                repo = pathSegments[0] || '';
-            }
-
-            if (owner && repo) {
-                repoInfoText.textContent = `${owner}/${repo}/models`;
-                fetchModelsFromGitHubAPI(owner, repo);
-            } else {
-                // Fallback for Localhost or Custom Domains
-                repoInfoText.textContent = `Local / Custom Domain`;
-                fallbackLocalOrPromptScan();
-            }
-        }
-
-        async function fetchModelsFromGitHubAPI(owner, repo) {
-            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/models`;
+            const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/models?ref=${BRANCH}`;
 
             try {
                 const response = await fetch(apiUrl);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                if (response.status === 404) {
+                    modelsList.innerHTML = `
+                        <div class="p-3 bg-rose-950/40 border border-rose-800/60 rounded-lg text-rose-300 text-xs">
+                            <p class="font-semibold mb-1">Thư mục không tồn tại!</p>
+                            <p class="text-[11px] text-rose-400/80">Hãy đảm bảo bạn đã tạo thư mục <code class="bg-rose-900/50 px-1 rounded">models/</code> trong repo <b>${REPO}</b>.</p>
+                        </div>
+                    `;
+                    return;
+                }
 
-                const items = await response.json();
-                const ifcFiles = items.filter(item => item.name.toLowerCase().endsWith('.ifc'));
+                if (response.status === 403) {
+                    modelsList.innerHTML = `
+                        <div class="p-3 bg-amber-950/40 border border-amber-800/60 rounded-lg text-amber-300 text-xs">
+                            <p class="font-semibold mb-1">Bị giới hạn API GitHub!</p>
+                            <p class="text-[11px] text-amber-400/80">Vui lòng chờ ít phút hoặc tải file trực tiếp qua nút ở góc trên.</p>
+                        </div>
+                    `;
+                    return;
+                }
 
-                renderModelsList(ifcFiles.map(file => ({
-                    name: file.name,
-                    url: file.download_url,
-                    size: file.size
-                })));
+                const data = await response.json();
+
+                if (!Array.isArray(data)) {
+                    throw new Error("Dữ liệu trả về không hợp lệ");
+                }
+
+                // Lọc các file có đuôi .ifc
+                const ifcFiles = data.filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.ifc'));
+
+                if (ifcFiles.length === 0) {
+                    modelsList.innerHTML = `
+                        <div class="p-3 bg-slate-950/50 border border-slate-800/60 rounded-lg text-slate-400 text-center text-xs">
+                            Không tìm thấy file <code class="text-blue-400">.ifc</code> nào trong thư mục <b>models/</b>.
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Hiển thị danh sách các file IFC lên UI
+                modelsList.innerHTML = '';
+                ifcFiles.forEach(file => {
+                    const fileCard = document.createElement('button');
+                    fileCard.className = 'w-full text-left p-2.5 bg-slate-950/60 hover:bg-blue-900/30 border border-slate-800/80 hover:border-blue-500/50 rounded-lg transition flex items-center justify-between group';
+                    
+                    fileCard.innerHTML = `
+                        <div class="flex items-center gap-2 truncate pr-2">
+                            <i data-lucide="file-text" class="w-4 h-4 text-blue-400 shrink-0"></i>
+                            <span class="truncate font-medium text-slate-200 group-hover:text-blue-300">${file.name}</span>
+                        </div>
+                        <i data-lucide="play-circle" class="w-4 h-4 text-slate-500 group-hover:text-blue-400 shrink-0"></i>
+                    `;
+
+                    // Sự kiện click chọn mô hình từ GitHub
+                    fileCard.addEventListener('click', () => {
+                        const rawUrl = file.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/models/${file.name}`;
+                        loadIFCFromURL(rawUrl, file.name);
+                    });
+
+                    modelsList.appendChild(fileCard);
+                });
+
+                lucide.createIcons();
+
             } catch (err) {
-                console.warn("GitHub API error or directory not found:", err);
-                // Attempt fetching relative directory if API fails or rate-limited
-                fallbackLocalOrPromptScan();
-            }
-        }
-
-        function fallbackLocalOrPromptScan() {
-            // Try fetching common relative models or offer simple mock entry
-            repoModelsList.innerHTML = `
-                <div class="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-300 mb-2">
-                    Chạy ngoài GitHub Pages. Đang kiểm tra thư mục cục bộ <code>./models/</code>
-                </div>
-                <div class="space-y-1">
-                    <button onclick="window.tryLoadRelativeModel('sample.ifc')" class="w-full text-left p-2 rounded-lg bg-slate-900 hover:bg-blue-600/20 border border-slate-800 text-xs flex items-center justify-between group transition">
-                        <span class="truncate text-slate-300 group-hover:text-blue-400">./models/sample.ifc</span>
-                        <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400"></i>
-                    </button>
-                </div>
-            `;
-            lucide.createIcons();
-        }
-
-        function renderModelsList(files) {
-            if (!files || files.length === 0) {
-                repoModelsList.innerHTML = `
-                    <div class="text-xs text-slate-400 text-center py-6">
-                        Không tìm thấy file <code>.ifc</code> nào trong thư mục <code>models/</code>.
+                console.error("Lỗi quét GitHub API:", err);
+                modelsList.innerHTML = `
+                    <div class="p-3 bg-slate-950/50 border border-slate-800/60 rounded-lg text-slate-400 text-xs text-center">
+                        Không thể kết nối API. Hãy kiểm tra lại hằng số <b>OWNER</b> và <b>REPO</b> trong file code.
                     </div>
                 `;
-                return;
             }
-
-            repoModelsList.innerHTML = files.map(file => `
-                <button data-url="${file.url}" data-name="${file.name}" class="model-item-btn w-full text-left p-2.5 rounded-xl bg-slate-900/80 hover:bg-blue-600/20 border border-slate-800/80 hover:border-blue-500/40 text-xs flex items-center justify-between group transition">
-                    <div class="flex items-center gap-2 truncate">
-                        <i data-lucide="file-box" class="w-4 h-4 text-blue-400 shrink-0"></i>
-                        <span class="truncate font-medium text-slate-200 group-hover:text-blue-300">${file.name}</span>
-                    </div>
-                    <i data-lucide="download-cloud" class="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 shrink-0"></i>
-                </button>
-            `).join('');
-
-            lucide.createIcons();
-
-            // Bind click handlers to model buttons
-            document.querySelectorAll('.model-item-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const url = btn.getAttribute('data-url');
-                    const name = btn.getAttribute('data-name');
-                    loadIfcFromUrl(url, name);
-                });
-            });
         }
 
-        // Load IFC File from URL (GitHub or Relative)
-        async function loadIfcFromUrl(url, fileName) {
-            showProgress(true, `Đang tải ${fileName}...`);
-            updateStatus(`Đang tải file <b>${fileName}</b> từ server...`, 'amber');
+        // 2. Hàm tải và giải mã file IFC từ URL
+        async function loadIFCFromURL(url, fileName) {
+            statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Đang tải <b>${fileName}</b>...`;
+            progressContainer.classList.remove('hidden');
+            progressContainer.classList.add('flex');
+            progressBar.style.width = '10%';
+            progressText.textContent = '10%';
 
             try {
                 const response = await fetch(url);
-                if (!response.ok) throw new Error("Không thể tải file từ server");
+                if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
 
-                const reader = response.body.getReader();
-                const contentLength = +response.headers.get('Content-Length') || 0;
-                let receivedLength = 0;
-                let chunks = [];
+                progressBar.style.width = '50%';
+                progressText.textContent = '50%';
+                statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> Đang giải mã mô hình 3D...`;
 
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
+                const buffer = await response.arrayBuffer();
 
-                    chunks.push(value);
-                    receivedLength += value.length;
-
-                    if (contentLength) {
-                        const percent = Math.round((receivedLength / contentLength) * 100);
-                        updateProgressBar(percent);
-                    }
+                // Xóa mô hình cũ nếu đang mở
+                if (currentModel) {
+                    scene.remove(currentModel);
+                    currentModel = null;
                 }
 
-                const chunksAll = new Uint8Array(receivedLength);
-                let position = 0;
-                for (let chunk of chunks) {
-                    chunksAll.set(chunk, position);
-                    position += chunk.length;
-                }
-
-                parseAndDisplayIfcBuffer(chunksAll.buffer, fileName);
-
-            } catch (err) {
-                console.error("Lỗi khi nạp file IFC:", err);
-                updateStatus(`Lỗi khi mở file <b>${fileName}</b>! Vui lòng kiểm tra lại.`, 'red');
-                showProgress(false);
-            }
-        }
-
-        // Parse Binary IFC Buffer into 3D Mesh
-        function parseAndDisplayIfcBuffer(arrayBuffer, fileName) {
-            showProgress(true, `Đang dựng mô hình 3D...`);
-
-            if (currentModel) {
-                scene.remove(currentModel);
-                currentModel = null;
-            }
-
-            try {
-                const byteArray = new Uint8Array(arrayBuffer);
-                ifcLoader.parse(byteArray, (ifcModel) => {
+                // Dựng mô hình IFC qua WebAssembly
+                ifcLoader.ifcManager.parse(buffer).then((ifcModel) => {
                     currentModel = ifcModel;
                     scene.add(ifcModel);
 
-                    // Fit Camera
+                    // Căn chỉnh camera vừa khung hình
                     const box = new THREE.Box3().setFromObject(ifcModel);
                     const center = box.getCenter(new THREE.Vector3());
                     const size = box.getSize(new THREE.Vector3());
@@ -419,30 +340,31 @@
                     camera.position.set(center.x + maxDim * 1.2, center.y + maxDim * 0.8, center.z + maxDim * 1.2);
                     controls.update();
 
-                    showProgress(false);
-                    updateStatus(`Đã hiển thị mô hình 3D: <b>${fileName}</b>`, 'emerald');
+                    // Hoàn tất
+                    progressBar.style.width = '100%';
+                    progressText.textContent = '100%';
+                    setTimeout(() => progressContainer.classList.add('hidden'), 500);
 
-                    propertyPanel.innerHTML = `
-                        <div class="space-y-1.5 text-slate-300">
-                            <div class="text-blue-400 font-semibold border-b border-slate-800 pb-1">Đã tải thành công</div>
-                            <div>Tên mô hình: <b class="text-white">${fileName}</b></div>
-                            <div>Kích thước: <span class="font-mono text-emerald-400">${size.x.toFixed(1)}m x ${size.y.toFixed(1)}m x ${size.z.toFixed(1)}m</span></div>
-                        </div>
-                    `;
+                    statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Đã hiển thị: <b>${fileName}</b>`;
                 });
+
             } catch (err) {
-                console.error("Lỗi parse IFC:", err);
-                updateStatus(`Không thể giải mã dữ liệu 3D của <b>${fileName}</b>.`, 'red');
-                showProgress(false);
+                console.error("Lỗi nạp file IFC:", err);
+                statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> Lỗi tải file! Vui lòng thử lại.`;
+                progressContainer.classList.add('hidden');
             }
         }
 
-        // Global Helper for Relative Local Load Fallback
-        window.tryLoadRelativeModel = function(fileName) {
-            loadIfcFromUrl(`./models/${fileName}`, fileName);
-        };
+        // 3. Tải file thủ công từ máy tính
+        localFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-        // Raycaster for BIM Object Selection
+            const url = URL.createObjectURL(file);
+            loadIFCFromURL(url, file.name);
+        });
+
+        // 4. Click chọn vật thể 3D để xem ID
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
@@ -461,102 +383,37 @@
 
                 if (expressID !== undefined) {
                     propertyPanel.innerHTML = `
-                        <div class="space-y-2 text-xs">
-                            <div class="text-blue-400 font-semibold border-b border-slate-800 pb-1 flex justify-between">
-                                <span>Express ID</span>
-                                <span class="font-mono text-white">#${expressID}</span>
-                            </div>
-                            <div><span class="text-slate-400">Loại cấu kiện:</span> <span class="text-slate-200">IFC Element</span></div>
-                            <div><span class="text-slate-400">Tọa độ nhấp:</span></div>
-                            <div class="font-mono text-[10px] bg-slate-900 p-2 rounded-lg border border-slate-800 text-emerald-400">
-                                X: ${intersects[0].point.x.toFixed(2)} | Y: ${intersects[0].point.y.toFixed(2)} | Z: ${intersects[0].point.z.toFixed(2)}
-                            </div>
+                        <div class="space-y-1.5 text-left">
+                            <div class="text-blue-400 font-semibold border-b border-slate-800 pb-1">Express ID: #${expressID}</div>
+                            <div><span class="text-slate-400">Định dạng:</span> <span class="text-slate-200">IFC Mesh Component</span></div>
+                            <div><span class="text-slate-400">Tọa độ chọn:</span> <br><span class="font-mono text-[10px] text-emerald-400">X:${intersects[0].point.x.toFixed(2)}, Y:${intersects[0].point.y.toFixed(2)}, Z:${intersects[0].point.z.toFixed(2)}</span></div>
                         </div>
                     `;
                 }
             }
         });
 
-        // Handle Local File Upload Selection
-        document.getElementById('local-file-input').addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            document.getElementById('local-file-label').textContent = file.name;
-            const reader = new FileReader();
-
-            showProgress(true, `Đang đọc file cục bộ...`);
-            reader.onload = (e) => {
-                parseAndDisplayIfcBuffer(e.target.result, file.name);
-            };
-            reader.readAsArrayBuffer(file);
-        });
-
-        // Toggle Grid Helper
-        document.getElementById('toggle-grid').addEventListener('change', (e) => {
-            gridHelper.visible = e.target.checked;
-        });
-
-        // Toggle Wireframe Mode
+        // Event listeners cho công cụ xem
+        document.getElementById('toggle-grid').addEventListener('change', (e) => gridHelper.visible = e.target.checked);
         document.getElementById('toggle-wireframe').addEventListener('change', (e) => {
             if (currentModel) {
-                currentModel.traverse((child) => {
-                    if (child.isMesh) child.material.wireframe = e.target.checked;
-                });
+                currentModel.traverse((child) => { if (child.isMesh) child.material.wireframe = e.target.checked; });
             }
         });
-
-        // Toggle Auto Rotation
-        document.getElementById('toggle-rotate').addEventListener('change', (e) => {
-            controls.autoRotate = e.target.checked;
-            controls.autoRotateSpeed = 2.0;
-        });
-
-        // Reset Camera Target
+        document.getElementById('toggle-rotate').addEventListener('change', (e) => controls.autoRotate = e.target.checked);
         document.getElementById('reset-view-btn').addEventListener('click', () => {
             if (currentModel) {
                 const box = new THREE.Box3().setFromObject(currentModel);
-                const center = box.getCenter(new THREE.Vector3());
-                controls.target.copy(center);
-                camera.position.set(center.x + 20, center.y + 15, center.z + 20);
+                controls.target.copy(box.getCenter(new THREE.Vector3()));
             } else {
                 controls.target.set(0, 0, 0);
-                camera.position.set(25, 20, 25);
             }
             controls.update();
         });
 
-        // Refresh GitHub Repo Models Button
-        document.getElementById('refresh-models-btn').addEventListener('click', () => {
-            scanGitHubRepoModels();
-        });
+        refreshBtn.addEventListener('click', fetchGitHubModels);
 
-        // UI Utility Helpers
-        function showProgress(show, text = '') {
-            if (show) {
-                progressContainer.classList.remove('hidden');
-                progressContainer.classList.add('flex');
-            } else {
-                progressContainer.classList.add('hidden');
-            }
-        }
-
-        function updateProgressBar(percent) {
-            progressBar.style.width = `${percent}%`;
-            progressText.textContent = `${percent}%`;
-        }
-
-        function updateStatus(htmlMessage, color = 'emerald') {
-            const colors = {
-                emerald: 'bg-emerald-500',
-                amber: 'bg-amber-500',
-                red: 'bg-red-500',
-                blue: 'bg-blue-500'
-            };
-            statusText.innerHTML = `<span class="w-2 h-2 rounded-full ${colors[color] || colors.emerald}"></span> ${htmlMessage}`;
-        }
-
-        // Render Animation Loop
+        // Loop Render
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
@@ -564,15 +421,15 @@
         }
         animate();
 
-        // Responsive Window Resize Handler
+        // Window Resize
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Initialize Repository Scan on Load
-        scanGitHubRepoModels();
+        // Khởi chạy: Tự động quét các file khi vào trang
+        fetchGitHubModels();
     </script>
 </body>
 </html>
